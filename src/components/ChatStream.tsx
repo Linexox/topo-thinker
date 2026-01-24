@@ -1,6 +1,6 @@
 import type { ChatViewMode, TopoNode } from "@/types/topo"
 import MarkdownRenderer from "./MarkdownRenderer"
-import { Scissors } from "lucide-react"
+import { Scissors, Minimize2, Maximize2 } from "lucide-react"
 
 function RolePill({ type }: { type: TopoNode["type"] }) {
   const color =
@@ -24,6 +24,8 @@ export default function ChatStream(props: {
   onChangeViewMode: (mode: ChatViewMode) => void
   onSelectNode: (nodeId: string) => void
   onLocateNode: (nodeId: string) => void
+  isFullscreen?: boolean
+  onToggleFullscreen?: () => void
 }) {
   const list: TopoNode[] = []
   if (props.viewMode === "timeline") {
@@ -46,21 +48,32 @@ export default function ChatStream(props: {
     <div className="flex h-full flex-col min-h-0">
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm font-medium">ChatStream</div>
-        <div className="flex rounded-lg border border-zinc-800 bg-zinc-950 p-1 text-xs">
-          <button
-            type="button"
-            onClick={() => props.onChangeViewMode("primary")}
-            className={`rounded-md px-2 py-1 ${props.viewMode === "primary" ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"}`}
-          >
-            主链
-          </button>
-          <button
-            type="button"
-            onClick={() => props.onChangeViewMode("timeline")}
-            className={`rounded-md px-2 py-1 ${props.viewMode === "timeline" ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"}`}
-          >
-            时间流
-          </button>
+        <div className="flex items-center gap-2">
+          {props.onToggleFullscreen && (
+            <button
+              onClick={props.onToggleFullscreen}
+              className="rounded-lg p-1 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors"
+              title={props.isFullscreen ? "退出全屏" : "全屏"}
+            >
+              {props.isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </button>
+          )}
+          <div className="flex rounded-lg border border-zinc-800 bg-zinc-950 p-1 text-xs">
+            <button
+              type="button"
+              onClick={() => props.onChangeViewMode("primary")}
+              className={`rounded-md px-2 py-1 ${props.viewMode === "primary" ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"}`}
+            >
+              主链
+            </button>
+            <button
+              type="button"
+              onClick={() => props.onChangeViewMode("timeline")}
+              className={`rounded-md px-2 py-1 ${props.viewMode === "timeline" ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"}`}
+            >
+              时间流
+            </button>
+          </div>
         </div>
       </div>
 

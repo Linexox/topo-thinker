@@ -1,5 +1,6 @@
 import { Send, Eye, Paperclip, X, File as FileIcon } from "lucide-react"
 import { useRef } from "react"
+import { useSettingsStore } from "@/stores/useSettingsStore"
 
 export interface Attachment {
   file: File
@@ -18,6 +19,7 @@ export default function Composer(props: {
   onRemoveFile: (index: number) => void
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { uiConfig } = useSettingsStore()
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -56,7 +58,12 @@ export default function Composer(props: {
           onChange={(e) => props.onChange(e.target.value)}
           rows={3}
           placeholder="输入你的下一条消息…"
-          className="flex-1 resize-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+          className="flex-1 resize-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+          style={{
+            fontSize: `${uiConfig.fontSize}px`,
+            lineHeight: uiConfig.lineHeight,
+            fontFamily: uiConfig.fontFamily
+          }}
           disabled={props.disabled || isReading}
           onKeyDown={(e) => {
              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -83,14 +90,6 @@ export default function Composer(props: {
           </button>
           <button
             type="button"
-            onClick={props.onOpenPreview}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
-            disabled={props.disabled || isReading}
-          >
-            <Eye className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
             onClick={() => props.onSend()}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
             disabled={props.disabled || isReading}
@@ -100,7 +99,6 @@ export default function Composer(props: {
           </button>
         </div>
       </div>
-      <div className="mt-2 text-xs text-zinc-400">建议先预览，确认这次将喂给模型的 messages。</div>
     </div>
   )
 }

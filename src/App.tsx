@@ -2,10 +2,12 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import SessionsList from "@/pages/SessionsList";
 import SessionDetail from "@/pages/SessionDetail";
 import Settings from "@/pages/Settings";
+import CustomFontLoader from "@/components/CustomFontLoader";
 
 export default function App() {
   return (
     <Router>
+      <CustomFontLoader />
       <Routes>
         <Route path="/" element={<Navigate to="/sessions" replace />} />
         <Route path="/sessions" element={<SessionsList />} />

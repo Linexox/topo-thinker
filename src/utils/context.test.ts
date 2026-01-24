@@ -61,13 +61,41 @@ describe("buildActiveSet / buildPreviewMessages", () => {
         { packId: "p1", order: 1, enabled: true },
       ],
     }
+    
+    // Mock nodes needed for graph traversal
+    const nodes: Record<string, TopoNode> = {
+        "x": { id: "x", type: "user", content: "X", createdAt: 10 }
+    }
+    const assemblies = { "x": assembly }
 
-    const active = buildActiveSet(assembly, packs)
+    const active = buildActiveSet(assemblies, packs, nodes, "x")
     expect([...active]).toEqual(expect.arrayContaining(["a", "b", "d"]))
     expect(active.has("c")).toBe(false)
 
-    const messages = buildPreviewMessages(assembly, packs, "hi")
-    expect(messages.map((m) => m.content)).toEqual(["A", "B", "D", "hi"])
+    const messages = buildPreviewMessages(assemblies, packs, "hi", nodes, "x")
+    // "X" comes from node "x" itself (implicit chain)
+    // "A", "B" from p1 (order 1)
+    // "D" from p2 (order 2, cut index 1)
+    // "hi" is pending user input
+    // The order of attached packs is sorted by 'order' in buildPreviewMessages
+    // p1 has order 1, p2 has order 2.
+    // So p1 nodes come first?
+    // Let's check buildPreviewMessages logic:
+    // It iterates chain (just x).
+    // For x, it gets attached packs, sorts by order.
+    // p1 (order 1) -> adds A, B
+    // p2 (order 2) -> adds D (skipped C due to cutIndexOverride)
+    // Then adds X itself (wait, code adds node content FIRST, then attached packs?)
+    
+    // Line 94: messages.push(node content) -> "X"
+    // Line 106: attached packs loop
+    
+    // So expected: ["X", "A", "B", "D", "hi"]
+    // But the original test expected ["A", "B", "D", "hi"].
+    // This implies the old test didn't consider the node itself.
+    // I should update expectation to include "X" or adjust the test if I can avoid including X.
+    // But X is the current node, so it must be included.
+    expect(messages.map((m) => m.content)).toEqual(["X", "A", "B", "D", "hi"])
   })
 })
 

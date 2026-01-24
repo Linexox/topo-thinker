@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, PanelRightOpen, Settings, Maximize2, Minimize2 } from "lucide-react";
+import { ArrowLeft, PanelRightOpen, Settings, Maximize2, Minimize2, MessageSquare } from "lucide-react";
 import { useTopoStore } from "@/stores/useTopoStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import GraphCanvas from "@/components/GraphCanvas";
@@ -8,6 +8,7 @@ import ChatStream from "@/components/ChatStream";
 import ContextPreviewDrawer from "@/components/ContextPreviewDrawer";
 import Composer, { Attachment } from "@/components/Composer";
 import { buildActiveSet, buildPreviewMessages } from "@/utils/context";
+import { processFile } from "@/utils/fileProcessor";
 
 export default function SessionDetail() {
   const params = useParams();
@@ -27,6 +28,8 @@ export default function SessionDetail() {
   const updateNodeContent = useTopoStore((s) => s.updateNodeContent);
 
   const apiConfig = useSettingsStore((s) => s.apiConfig);
+  const layoutMode = useSettingsStore((s) => s.uiConfig.layoutMode || 'top');
+  const setUiConfig = useSettingsStore((s) => s.setUiConfig);
 
   const [composerText, setComposerText] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -34,6 +37,51 @@ export default function SessionDetail() {
   const [isGraphFullscreen, setIsGraphFullscreen] = useState(false);
   const [pendingSourceIds, setPendingSourceIds] = useState<string[]>([]);
   const [focusTarget, setFocusTarget] = useState<{ nodeId: string; ts: number } | undefined>(undefined);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(58.33); // Default to ~7/12
+  const [isResizingState, setIsResizingState] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isResizing = useRef(false);
+
+  const startResizing = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    setIsResizingState(true);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, []);
+
+  const stopResizing = useCallback(() => {
+    isResizing.current = false;
+    setIsResizingState(false);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }, []);
+
+  const resize = useCallback((e: MouseEvent) => {
+    if (!isResizing.current || !containerRef.current) return;
+    e.preventDefault();
+    
+    const containerRect = containerRef.current.getBoundingClientRect();
+    // Offset by half handle width (8px) to keep cursor centered
+    const relativeX = e.clientX - containerRect.left - 8;
+    const newWidth = (relativeX / containerRect.width) * 100;
+    
+    // Limit width between 20% and 80% to ensure both panels remain usable
+    if (newWidth >= 20 && newWidth <= 80) {
+      setLeftPanelWidth(newWidth);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isResizingState) {
+      window.addEventListener('mousemove', resize);
+      window.addEventListener('mouseup', stopResizing);
+    }
+    return () => {
+      window.removeEventListener('mousemove', resize);
+      window.removeEventListener('mouseup', stopResizing);
+    };
+  }, [isResizingState, resize, stopResizing]);
 
   const selectedNodeId = session?.ui.selectedNodeId;
   const assembly = selectedNodeId ? session?.assemblies[selectedNodeId] : undefined;
@@ -69,30 +117,7 @@ export default function SessionDetail() {
 
     files.forEach(async (file) => {
       try {
-        let content = ""
-        if (file.type.startsWith("image/")) {
-          content = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onload = () => resolve(`\n\n![${file.name}](${reader.result})`)
-            reader.onerror = reject
-            reader.readAsDataURL(file)
-          })
-        } else {
-          content = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onload = () => {
-              const res = reader.result as string
-              if (res.includes('\0')) {
-                resolve(`\n\n[File: ${file.name} (Binary data not shown)]`)
-              } else {
-                const ext = file.name.split('.').pop() || 'text'
-                resolve(`\n\n---\n**File: ${file.name}**\n\`\`\`${ext}\n${res}\n\`\`\``)
-              }
-            }
-            reader.onerror = reject
-            reader.readAsText(file)
-          })
-        }
+        const content = await processFile(file);
         setAttachments(prev => prev.map(a => a.file === file ? { ...a, content, loading: false } : a))
       } catch (e) {
         console.error("Error reading file", e)
@@ -106,14 +131,39 @@ export default function SessionDetail() {
   }
 
   const handleSendMessage = async (parentId: string, text: string, sourceIds: string[] = []) => {
-    if (!sessionId || !text.trim()) return
-
-    const userNodeId = addUserNode(sessionId, parentId, text, sourceIds)
+    if (!sessionId) return
     
-    // Clear pending sources if we are sending from the currently selected node
+    // Prevent sending if files are still loading
+    if (attachments.some(a => a.loading)) return
+
+    let finalText = text
+    let shouldClearAttachments = false
+
+    // If sending from NodeCard (parentId !== selectedNodeId), try to append attachments if they exist
+    if (attachments.length > 0) {
+      if (parentId !== selectedNodeId) {
+        const attachmentContent = attachments.map(a => a.content || "").join("")
+        if (attachmentContent) {
+          finalText += attachmentContent
+          shouldClearAttachments = true
+        }
+      } else {
+        // From main composer, text should already include attachments via fullComposerText
+        shouldClearAttachments = true
+      }
+    }
+
+    if (!finalText.trim()) return
+
+    const userNodeId = addUserNode(sessionId, parentId, finalText, sourceIds)
+    
+    // Clear pending sources and inputs
     if (parentId === selectedNodeId) {
       setPendingSourceIds([])
       setComposerText("")
+    }
+    
+    if (shouldClearAttachments) {
       setAttachments([])
     }
 
@@ -201,51 +251,78 @@ export default function SessionDetail() {
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-zinc-950 text-zinc-100">
-      <header className="flex-none border-b border-zinc-800">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <Link
-              to="/sessions"
-              className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              返回
-            </Link>
-            <div>
-              <div className="text-sm font-semibold">{session?.title ?? `会话：${sessionId}`}</div>
-              <div className="text-xs text-zinc-400">会话详情 MVP 布局占位</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link
-              to="/settings"
-              className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
-              title="API 配置"
-            >
-              <Settings className="h-4 w-4" />
-            </Link>
-            <button
-              type="button"
-              onClick={() => setPreviewOpen(true)}
-              className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
-            >
-              <PanelRightOpen className="h-4 w-4" />
-              预览
-            </button>
-          </div>
+    <div className="h-screen flex overflow-hidden bg-zinc-950 text-zinc-100">
+      {/* Sidebar Navigation */}
+      <aside className="flex-none w-16 flex flex-col items-center py-4 border-r border-zinc-800 bg-zinc-900 gap-6 z-20 transition-all duration-300">
+        <div className="flex w-full px-2 justify-center">
+          <Link
+            to="/sessions"
+            className="p-2 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+            title="返回会话列表"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
         </div>
-      </header>
+        
+        <div className="flex-1" />
 
-      <main className="flex-1 mx-auto w-full max-w-6xl px-6 py-6 min-h-0">
-        <div className={`grid grid-cols-12 gap-4 h-full transition-all ${isGraphFullscreen ? 'fixed inset-0 z-50 bg-zinc-950 p-4' : ''}`}>
-          <section className={`${
-            isGraphFullscreen 
-              ? 'col-span-12 h-full' 
-              : 'col-span-7'
-            } flex h-full flex-col rounded-xl border border-zinc-800 bg-zinc-900 p-4 transition-all duration-300 relative group`}>
+        <div className="flex w-full px-2 justify-center flex-col gap-4">
+           <button
+            type="button"
+            onClick={() => setPreviewOpen(true)}
+            className="p-2 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2"
+            title="预览上下文"
+          >
+            <PanelRightOpen className="h-5 w-5" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setUiConfig({ layoutMode: layoutMode === 'zen' ? 'top' : 'zen' })}
+            className={`p-2 rounded-lg transition-colors flex items-center justify-center gap-2 ${layoutMode === 'zen' ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'}`}
+            title={layoutMode === 'zen' ? "退出专注模式" : "专注模式"}
+          >
+            <MessageSquare className="h-5 w-5" />
+          </button>
+
+          <Link
+            to="/settings"
+            className="p-2 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2"
+            title="设置"
+          >
+            <Settings className="h-5 w-5" />
+          </Link>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col min-w-0 relative">
+        {/* Top Header for Title - Only show in top mode */}
+        {layoutMode === 'top' && (
+          <header className="flex-none border-b border-zinc-800 bg-zinc-950/50 backdrop-blur-sm">
+             <div className="px-6 py-3">
+                <div className="text-sm font-semibold">{session?.title ?? `会话：${sessionId}`}</div>
+                <div className="text-xs text-zinc-400">会话详情 MVP 布局占位</div>
+             </div>
+          </header>
+        )}
+        
+        {/* Floating Title for Side Mode */}
+        {layoutMode === 'side' && (
+           <div className="absolute top-4 left-6 z-40 pointer-events-none opacity-50 hover:opacity-100 transition-opacity">
+              <div className="text-sm font-bold text-zinc-200 drop-shadow-md">{session?.title ?? `会话：${sessionId}`}</div>
+           </div>
+        )}
+
+        <div className="flex-1 min-h-0 relative">
+          <div ref={containerRef} className={`flex w-full h-full transition-all ${isGraphFullscreen ? 'fixed inset-0 z-50 bg-zinc-950 p-4' : 'px-6 py-6'}`}>
+          {layoutMode !== 'zen' && (
+            <section 
+              style={{ width: isGraphFullscreen ? '100%' : `${leftPanelWidth}%` }}
+              className={`flex-none flex h-full flex-col rounded-xl border border-zinc-800 bg-zinc-900 p-4 ${isResizingState ? '' : 'transition-all duration-300'} relative group min-w-0`}
+            >
             
-            <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between">
               <div className="text-sm font-medium">GraphCanvas</div>
               <button
                 onClick={() => setIsGraphFullscreen(!isGraphFullscreen)}
@@ -316,10 +393,24 @@ export default function SessionDetail() {
             </div>
             <div className="mt-3 text-xs text-zinc-400">提示：Cmd/Ctrl+点击节点 = 装配/取消装配该节点的上下文</div>
           </section>
+          )}
+
+          {isResizingState && (
+            <div className="fixed inset-0 z-[100] cursor-col-resize bg-transparent" />
+          )}
+
+          {!isGraphFullscreen && layoutMode !== 'zen' && (
+            <div
+              className="w-4 flex-none z-10 cursor-col-resize flex items-center justify-center group/resizer hover:scale-x-110 transition-transform select-none active:scale-x-125"
+              onMouseDown={startResizing}
+            >
+              <div className="w-1 h-8 rounded-full bg-zinc-800 group-hover/resizer:bg-indigo-500 transition-colors" />
+            </div>
+          )}
 
           {!isGraphFullscreen && (
-            <div className="col-span-5 flex flex-col h-full gap-4 min-h-0">
-              <section className="flex-1 min-h-0 flex flex-col rounded-xl border border-zinc-800 bg-zinc-900 p-4 transition-all duration-300">
+            <div className={`flex flex-col flex-1 h-full min-h-0 ${layoutMode === 'zen' ? 'max-w-4xl mx-auto w-full' : ''}`}>
+              <section className={`flex-1 min-h-0 flex flex-col rounded-xl border border-zinc-800 bg-zinc-900 p-4 ${isResizingState ? '' : 'transition-all duration-300'}`}>
                 {session ? (
                   <ChatStream
                     nodes={session.nodes}
@@ -334,23 +425,24 @@ export default function SessionDetail() {
                   <div className="h-full rounded-lg border border-dashed border-zinc-700" />
                 )}
               </section>
-              <div className="flex-none">
-                 <Composer
+              <div className="mt-4">
+                  <Composer
                     value={composerText}
                     onChange={setComposerText}
                     onOpenPreview={() => setPreviewOpen(true)}
-                    onSend={async () => {
-                      if (!session || !selectedNodeId) return
-                      await handleSendMessage(selectedNodeId, fullComposerText, pendingSourceIds)
-                    }}
-                    disabled={!session || !selectedNodeId}
                     attachments={attachments}
+                    onSend={async () => {
+                      if (!session || !selectedNodeId) return;
+                      await handleSendMessage(selectedNodeId, fullComposerText, pendingSourceIds);
+                    }}
                     onAddFiles={handleAddFiles}
                     onRemoveFile={handleRemoveFile}
+                    disabled={!session}
                   />
-              </div>
+                </div>
             </div>
           )}
+        </div>
         </div>
       </main>
 

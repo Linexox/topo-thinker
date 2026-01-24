@@ -1,9 +1,12 @@
-import { useMemo, useState, useEffect } from "react"
-import ReactFlow, { Background, Controls, Handle, Position, type Edge, type Node, type ReactFlowInstance } from "reactflow"
+import { useMemo, useState, useEffect, useRef } from "react"
+import ReactFlow, { Background, Controls, Handle, Position, NodeResizer, type Edge, type Node, type ReactFlowInstance } from "reactflow"
 import "reactflow/dist/style.css"
-import { GitFork, MessageSquarePlus } from "lucide-react"
+import { GitFork, MessageSquarePlus, Paperclip, X, File as FileIcon } from "lucide-react"
 import type { TopoNode, ContextAssembly, SnapshotPack } from "@/types/topo"
 import MarkdownRenderer from "./MarkdownRenderer"
+import { processFile } from "@/utils/fileProcessor"
+import { Attachment } from "@/components/Composer"
+import { useSettingsStore } from "@/stores/useSettingsStore"
 
 type TopoNodeData = {
   node: TopoNode
@@ -28,10 +31,13 @@ function NodeCard({ data }: { data: TopoNodeData }) {
   const active = data.isActive ? "border-indigo-500/60" : "border-zinc-800 opacity-70"
   const selected = data.isSelected ? "ring-2 ring-indigo-500/40" : ""
   
+  const { uiConfig } = useSettingsStore()
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState(n.content)
   const [isReplying, setIsReplying] = useState(false)
   const [replyContent, setReplyContent] = useState("")
+  const [attachments, setAttachments] = useState<Attachment[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setEditContent(n.content)
@@ -44,16 +50,51 @@ function NodeCard({ data }: { data: TopoNodeData }) {
     setIsEditing(false)
   }
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files)
+      const newAttachments: Attachment[] = files.map(f => ({ file: f, loading: true }))
+      setAttachments(prev => [...prev, ...newAttachments])
+
+      files.forEach(async (file) => {
+        try {
+          const content = await processFile(file)
+          setAttachments(prev => prev.map(a => a.file === file ? { ...a, content, loading: false } : a))
+        } catch (e) {
+          console.error("Error reading file", e)
+          setAttachments(prev => prev.map(a => a.file === file ? { ...a, loading: false } : a))
+        }
+      })
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }
+
+  const handleRemoveFile = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index))
+  }
+
   const handleSendReply = () => {
-    if (!replyContent.trim()) return
-    data.onAsk(n.id, replyContent)
+    if (attachments.some(a => a.loading)) return
+    
+    let finalContent = replyContent
+    const attachmentContent = attachments.map(a => a.content || "").join("")
+    if (attachmentContent) {
+      finalContent += attachmentContent
+    }
+
+    if (!finalContent.trim()) return
+    
+    data.onAsk(n.id, finalContent)
     setReplyContent("")
+    setAttachments([])
     setIsReplying(false)
   }
 
   return (
     <div 
-      className={`${base} ${active} ${selected} cursor-pointer transition-colors max-w-[320px]`}
+      className={`${base} ${active} ${selected} cursor-pointer transition-colors w-full h-full`}
       title={n.content}
       onClick={(e) => {
         if (isEditing || isReplying) return
@@ -68,24 +109,39 @@ function NodeCard({ data }: { data: TopoNodeData }) {
       }}
       onDoubleClick={(e) => {
         e.stopPropagation()
+        if (n.type === 'assistant') return
         setIsEditing(true)
       }}
     >
+      <NodeResizer 
+        isVisible={data.isSelected} 
+        minWidth={200} 
+        minHeight={100} 
+        color="#6366f1" 
+        handleStyle={{ width: 8, height: 8, borderRadius: 4 }}
+      />
       <Handle type="target" position={Position.Left} className="!h-2 !w-2 !border-0 !bg-zinc-500" />
-      <div className="flex flex-col gap-2 min-w-[200px]">
+      <div className="flex flex-col gap-2 min-w-[200px] h-full">
         {parentContent && (
-          <div className="border-b border-zinc-800 pb-2 mb-1">
+          <div className="border-b border-zinc-800 pb-2 mb-1 flex-none">
              <div className="flex items-center gap-2 mb-1">
                 <span className="rounded-md bg-zinc-900 px-2 py-0.5 text-[10px] font-medium text-zinc-400">User</span>
              </div>
-             <div className="max-h-[80px] overflow-y-auto overflow-x-hidden text-xs text-zinc-300 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent nodrag nowheel">
+             <div 
+               className="max-h-[80px] overflow-y-auto overflow-x-hidden text-xs text-zinc-300 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent nowheel"
+               style={{
+                 fontSize: `${Math.max(10, uiConfig.fontSize - 2)}px`,
+                 lineHeight: uiConfig.lineHeight,
+                 fontFamily: uiConfig.fontFamily
+               }}
+             >
                 <MarkdownRenderer content={parentContent} />
              </div>
           </div>
         )}
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 mb-1">
+        <div className="flex items-start justify-between gap-2 flex-1 min-h-0">
+          <div className="min-w-0 flex-1 h-full flex flex-col">
+            <div className="flex items-center gap-2 mb-1 flex-none">
               <span className="rounded-md bg-zinc-900 px-2 py-0.5 text-[11px] font-medium text-zinc-200">{n.type}</span>
               {n.forkedFromId ? <span className="text-[11px] text-zinc-400">fork</span> : null}
             </div>
@@ -105,18 +161,30 @@ function NodeCard({ data }: { data: TopoNodeData }) {
                     setIsEditing(false)
                   }
                 }}
-                className="w-full h-[150px] bg-zinc-900 text-xs text-zinc-200 p-2 rounded border border-zinc-700 focus:outline-none focus:border-indigo-500 resize-none nodrag nowheel"
+                className="w-full h-full bg-zinc-900 text-xs text-zinc-200 p-2 rounded border border-zinc-700 focus:outline-none focus:border-indigo-500 resize-none nodrag nowheel"
+                style={{
+                  fontSize: `${uiConfig.fontSize}px`,
+                  lineHeight: uiConfig.lineHeight,
+                  fontFamily: uiConfig.fontFamily
+                }}
                 autoFocus
                 onClick={(e) => e.stopPropagation()}
               />
             ) : (
-              <div className="max-h-[200px] overflow-y-auto overflow-x-hidden text-xs text-zinc-200 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent nodrag nowheel">
+              <div 
+                className="flex-1 overflow-y-auto overflow-x-hidden text-xs text-zinc-200 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent nowheel"
+                style={{
+                  fontSize: `${uiConfig.fontSize}px`,
+                  lineHeight: uiConfig.lineHeight,
+                  fontFamily: uiConfig.fontFamily
+                }}
+              >
                  {n.content ? <MarkdownRenderer content={n.content} /> : "（空）"}
               </div>
             )}
           </div>
           {!isEditing && (
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1 flex-none">
               <button
                 type="button"
                 onClick={(e) => {
@@ -135,12 +203,34 @@ function NodeCard({ data }: { data: TopoNodeData }) {
         </div>
         
         {isReplying && (
-          <div className="mt-2 border-t border-zinc-800 pt-2" onClick={e => e.stopPropagation()}>
+          <div className="mt-2 border-t border-zinc-800 pt-2 flex-none" onClick={e => e.stopPropagation()}>
+             {attachments.length > 0 && (
+               <div className="flex flex-wrap gap-2 mb-2 pb-2 border-b border-zinc-800">
+                 {attachments.map((a, i) => (
+                   <div key={i} className="flex items-center gap-1 rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-200">
+                     <FileIcon className="h-3 w-3 text-zinc-400" />
+                     <span className="max-w-[100px] truncate" title={a.file.name}>{a.file.name}</span>
+                     {a.loading && <span className="text-zinc-500 ml-1">...</span>}
+                     <button
+                       onClick={() => handleRemoveFile(i)}
+                       className="ml-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200"
+                     >
+                       <X className="h-3 w-3" />
+                     </button>
+                   </div>
+                 ))}
+               </div>
+             )}
              <textarea
                 value={replyContent}
                 onChange={(e) => setReplyContent(e.target.value)}
                 placeholder="Reply..."
                 className="w-full h-[80px] bg-zinc-900 text-xs text-zinc-200 p-2 rounded border border-zinc-700 focus:outline-none focus:border-indigo-500 resize-none nodrag nowheel mb-2"
+                style={{
+                  fontSize: `${uiConfig.fontSize}px`,
+                  lineHeight: uiConfig.lineHeight,
+                  fontFamily: uiConfig.fontFamily
+                }}
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
@@ -152,21 +242,41 @@ function NodeCard({ data }: { data: TopoNodeData }) {
                   }
                 }}
              />
-             <div className="flex justify-end gap-2">
-               <button
-                 type="button"
-                 onClick={() => setIsReplying(false)}
-                 className="px-2 py-1 rounded text-xs text-zinc-400 hover:text-zinc-200"
-               >
-                 Cancel
-               </button>
-               <button
-                 type="button"
-                 onClick={handleSendReply}
-                 className="px-2 py-1 rounded text-xs bg-indigo-600 text-white hover:bg-indigo-500"
-               >
-                 Send
-               </button>
+             <div className="flex justify-between items-center">
+               <div className="flex gap-2">
+                 <input
+                    type="file"
+                    multiple
+                    ref={fileInputRef}
+                    className="hidden"
+                    onChange={handleFileSelect}
+                 />
+                 <button
+                   type="button"
+                   onClick={() => fileInputRef.current?.click()}
+                   className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                   title="Upload file"
+                 >
+                   <Paperclip className="h-4 w-4" />
+                 </button>
+               </div>
+               <div className="flex gap-2">
+                 <button
+                   type="button"
+                   onClick={() => setIsReplying(false)}
+                   className="px-2 py-1 rounded text-xs text-zinc-400 hover:text-zinc-200"
+                 >
+                   Cancel
+                 </button>
+                 <button
+                   type="button"
+                   onClick={handleSendReply}
+                   className="px-2 py-1 rounded text-xs bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50"
+                   disabled={attachments.some(a => a.loading)}
+                 >
+                   {attachments.some(a => a.loading) ? "..." : "Send"}
+                 </button>
+               </div>
              </div>
           </div>
         )}
