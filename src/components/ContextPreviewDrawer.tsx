@@ -7,7 +7,7 @@ function RoleTag({ role }: { role: PreviewMessage["role"] }) {
     role === "user"
       ? "bg-emerald-600/20 text-emerald-200"
       : role === "assistant"
-        ? "bg-indigo-600/20 text-indigo-200"
+        ? "bg-primary-600/20 text-primary-200"
         : role === "tool"
           ? "bg-amber-600/20 text-amber-200"
           : "bg-zinc-700/40 text-zinc-200"
@@ -69,7 +69,7 @@ export default function ContextPreviewDrawer(props: {
                       <button
                         type="button"
                         onClick={() => props.onToggleEnabled(ap.packId, !ap.enabled)}
-                        className={`h-6 w-10 rounded-full p-1 transition-colors ${ap.enabled ? "bg-indigo-600" : "bg-zinc-700"}`}
+                        className={`h-6 w-10 rounded-full p-1 transition-colors ${ap.enabled ? "bg-primary-600" : "bg-zinc-700"}`}
                         aria-label="切换启用"
                       >
                         <span
@@ -131,7 +131,7 @@ export default function ContextPreviewDrawer(props: {
           <button
             type="button"
             onClick={props.onSend}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-500"
           >
             <Send className="h-4 w-4" />
             发送

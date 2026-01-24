@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from "react"
-import ReactFlow, { Background, Controls, Handle, Position, NodeResizer, type Edge, type Node, type ReactFlowInstance } from "reactflow"
+import ReactFlow, { Background, Controls, Handle, Position, type Edge, type Node, type ReactFlowInstance } from "reactflow"
 import "reactflow/dist/style.css"
 import { GitFork, MessageSquarePlus, Paperclip, X, File as FileIcon } from "lucide-react"
 import type { TopoNode, ContextAssembly, SnapshotPack } from "@/types/topo"
@@ -7,6 +7,7 @@ import MarkdownRenderer from "./MarkdownRenderer"
 import { processFile } from "@/utils/fileProcessor"
 import { Attachment } from "@/components/Composer"
 import { useSettingsStore } from "@/stores/useSettingsStore"
+import { useThemeStore, themeColors } from "@/stores/useThemeStore"
 
 type TopoNodeData = {
   node: TopoNode
@@ -28,8 +29,8 @@ function NodeCard({ data }: { data: TopoNodeData }) {
   const parentContent = data.parentContent
   const n = data.node
   const base = "rounded-xl border bg-zinc-950 px-3 py-2 shadow-sm"
-  const active = data.isActive ? "border-indigo-500/60" : "border-zinc-800 opacity-70"
-  const selected = data.isSelected ? "ring-2 ring-indigo-500/40" : ""
+  const active = data.isActive ? "border-primary-500/60" : "border-zinc-800 opacity-70"
+  const selected = data.isSelected ? "ring-2 ring-primary-500/40" : ""
   
   const { uiConfig } = useSettingsStore()
   const [isEditing, setIsEditing] = useState(false)
@@ -94,7 +95,7 @@ function NodeCard({ data }: { data: TopoNodeData }) {
 
   return (
     <div 
-      className={`${base} ${active} ${selected} cursor-pointer transition-colors w-full h-full`}
+      className={`${base} ${active} ${selected} cursor-pointer transition-colors max-w-[320px]`}
       title={n.content}
       onClick={(e) => {
         if (isEditing || isReplying) return
@@ -113,22 +114,15 @@ function NodeCard({ data }: { data: TopoNodeData }) {
         setIsEditing(true)
       }}
     >
-      <NodeResizer 
-        isVisible={data.isSelected} 
-        minWidth={200} 
-        minHeight={100} 
-        color="#6366f1" 
-        handleStyle={{ width: 8, height: 8, borderRadius: 4 }}
-      />
       <Handle type="target" position={Position.Left} className="!h-2 !w-2 !border-0 !bg-zinc-500" />
-      <div className="flex flex-col gap-2 min-w-[200px] h-full">
+      <div className="flex flex-col gap-2 min-w-[200px]">
         {parentContent && (
-          <div className="border-b border-zinc-800 pb-2 mb-1 flex-none">
+          <div className="border-b border-zinc-800 pb-2 mb-1">
              <div className="flex items-center gap-2 mb-1">
                 <span className="rounded-md bg-zinc-900 px-2 py-0.5 text-[10px] font-medium text-zinc-400">User</span>
              </div>
              <div 
-               className="max-h-[80px] overflow-y-auto overflow-x-hidden text-xs text-zinc-300 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent nowheel"
+               className="max-h-[80px] overflow-y-auto overflow-x-hidden text-xs text-zinc-300 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent nodrag nowheel"
                style={{
                  fontSize: `${Math.max(10, uiConfig.fontSize - 2)}px`,
                  lineHeight: uiConfig.lineHeight,
@@ -139,9 +133,9 @@ function NodeCard({ data }: { data: TopoNodeData }) {
              </div>
           </div>
         )}
-        <div className="flex items-start justify-between gap-2 flex-1 min-h-0">
-          <div className="min-w-0 flex-1 h-full flex flex-col">
-            <div className="flex items-center gap-2 mb-1 flex-none">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-1">
               <span className="rounded-md bg-zinc-900 px-2 py-0.5 text-[11px] font-medium text-zinc-200">{n.type}</span>
               {n.forkedFromId ? <span className="text-[11px] text-zinc-400">fork</span> : null}
             </div>
@@ -161,7 +155,7 @@ function NodeCard({ data }: { data: TopoNodeData }) {
                     setIsEditing(false)
                   }
                 }}
-                className="w-full h-full bg-zinc-900 text-xs text-zinc-200 p-2 rounded border border-zinc-700 focus:outline-none focus:border-indigo-500 resize-none nodrag nowheel"
+                className="w-full h-[150px] bg-zinc-900 text-xs text-zinc-200 p-2 rounded border border-zinc-700 focus:outline-none focus:border-primary-500 resize-none nodrag nowheel"
                 style={{
                   fontSize: `${uiConfig.fontSize}px`,
                   lineHeight: uiConfig.lineHeight,
@@ -172,7 +166,7 @@ function NodeCard({ data }: { data: TopoNodeData }) {
               />
             ) : (
               <div 
-                className="flex-1 overflow-y-auto overflow-x-hidden text-xs text-zinc-200 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent nowheel"
+                className="max-h-[200px] overflow-y-auto overflow-x-hidden text-xs text-zinc-200 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent nowheel"
                 style={{
                   fontSize: `${uiConfig.fontSize}px`,
                   lineHeight: uiConfig.lineHeight,
@@ -184,7 +178,7 @@ function NodeCard({ data }: { data: TopoNodeData }) {
             )}
           </div>
           {!isEditing && (
-            <div className="flex flex-col gap-1 flex-none">
+            <div className="flex flex-col gap-1">
               <button
                 type="button"
                 onClick={(e) => {
@@ -203,7 +197,7 @@ function NodeCard({ data }: { data: TopoNodeData }) {
         </div>
         
         {isReplying && (
-          <div className="mt-2 border-t border-zinc-800 pt-2 flex-none" onClick={e => e.stopPropagation()}>
+          <div className="mt-2 border-t border-zinc-800 pt-2" onClick={e => e.stopPropagation()}>
              {attachments.length > 0 && (
                <div className="flex flex-wrap gap-2 mb-2 pb-2 border-b border-zinc-800">
                  {attachments.map((a, i) => (
@@ -225,7 +219,7 @@ function NodeCard({ data }: { data: TopoNodeData }) {
                 value={replyContent}
                 onChange={(e) => setReplyContent(e.target.value)}
                 placeholder="Reply..."
-                className="w-full h-[80px] bg-zinc-900 text-xs text-zinc-200 p-2 rounded border border-zinc-700 focus:outline-none focus:border-indigo-500 resize-none nodrag nowheel mb-2"
+                className="w-full h-[80px] bg-zinc-900 text-xs text-zinc-200 p-2 rounded border border-zinc-700 focus:outline-none focus:border-primary-500 resize-none nodrag nowheel mb-2"
                 style={{
                   fontSize: `${uiConfig.fontSize}px`,
                   lineHeight: uiConfig.lineHeight,
@@ -271,7 +265,7 @@ function NodeCard({ data }: { data: TopoNodeData }) {
                  <button
                    type="button"
                    onClick={handleSendReply}
-                   className="px-2 py-1 rounded text-xs bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50"
+                   className="px-2 py-1 rounded text-xs bg-primary-600 text-white hover:bg-primary-500 disabled:opacity-50"
                    disabled={attachments.some(a => a.loading)}
                  >
                    {attachments.some(a => a.loading) ? "..." : "Send"}
@@ -300,6 +294,8 @@ export default function GraphCanvas(props: {
   onUpdateContent: (nodeId: string, content: string) => void
   onAsk: (parentId: string, text: string) => void
 }) {
+  const { themeColor } = useThemeStore()
+  const activeColor = `rgb(${themeColors[themeColor][500]})`
   const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null)
 
   // Identify nodes that are explicitly referenced as context sources
@@ -468,7 +464,7 @@ export default function GraphCanvas(props: {
         target: targetId,
         animated: props.activeSet.has(targetId),
         // Unified style for structural edges as well
-        style: { stroke: props.activeSet.has(targetId) ? "#6366f1" : "#52525b", strokeWidth: 2 },
+        style: { stroke: props.activeSet.has(targetId) ? activeColor : "#52525b", strokeWidth: 2 },
       })
     }
 
@@ -540,17 +536,23 @@ export default function GraphCanvas(props: {
             source: sourceId,
             target: targetId,
             animated: props.activeSet.has(targetId) && props.activeSet.has(sourceId),
-            style: { stroke: props.activeSet.has(targetId) && props.activeSet.has(sourceId) ? "#6366f1" : "#52525b", strokeWidth: 2, strokeDasharray: "5 5" },
+            style: { stroke: props.activeSet.has(targetId) && props.activeSet.has(sourceId) ? activeColor : "#52525b", strokeWidth: 2, strokeDasharray: "5 5" },
           })
         }
       }
     }
     
     return list
-  }, [props.nodes, props.assemblies, props.packs, props.activeSet, mergedUserIds, userToAssistantMap])
+  }, [props.nodes, props.assemblies, props.packs, props.activeSet, mergedUserIds, userToAssistantMap, activeColor])
+
+  const lastFocusTsRef = useRef<number>(0)
 
   useEffect(() => {
     if (!rfInstance || !props.focusTarget) return
+
+    // Prevent repeated focusing if the timestamp hasn't changed
+    if (props.focusTarget.ts === lastFocusTsRef.current) return
+    lastFocusTsRef.current = props.focusTarget.ts
 
     let targetId = props.focusTarget.nodeId
     // Handle merged nodes redirection
@@ -562,15 +564,14 @@ export default function GraphCanvas(props: {
     }
 
     // Attempt to focus. If node is not found (maybe ReactFlow hasn't updated nodes yet), retry briefly
-    const attemptFocus = (retries = 3) => {
+    const attemptFocus = (retries = 20) => {
         const node = rfInstance.getNode(targetId)
-        if (node) {
-            rfInstance.fitView({
-                nodes: [{ id: targetId }],
-                padding: 0.2,
-                maxZoom: 1.2,
-                duration: 800,
-            })
+        // Ensure node exists and has dimensions (layouted)
+        if (node && node.width && node.height) {
+            const x = node.position.x + node.width / 2
+            const y = node.position.y + node.height / 2
+            
+            rfInstance.setCenter(x, y, { zoom: 1.0, duration: 800 })
         } else if (retries > 0) {
             setTimeout(() => attemptFocus(retries - 1), 50)
         }

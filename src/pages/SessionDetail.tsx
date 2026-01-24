@@ -279,7 +279,7 @@ export default function SessionDetail() {
           <button
             type="button"
             onClick={() => setUiConfig({ layoutMode: layoutMode === 'zen' ? 'top' : 'zen' })}
-            className={`p-2 rounded-lg transition-colors flex items-center justify-center gap-2 ${layoutMode === 'zen' ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'}`}
+            className={`p-2 rounded-lg transition-colors flex items-center justify-center gap-2 ${layoutMode === 'zen' ? 'bg-primary-600 text-white hover:bg-primary-500' : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'}`}
             title={layoutMode === 'zen' ? "退出专注模式" : "专注模式"}
           >
             <MessageSquare className="h-5 w-5" />
@@ -404,7 +404,7 @@ export default function SessionDetail() {
               className="w-4 flex-none z-10 cursor-col-resize flex items-center justify-center group/resizer hover:scale-x-110 transition-transform select-none active:scale-x-125"
               onMouseDown={startResizing}
             >
-              <div className="w-1 h-8 rounded-full bg-zinc-800 group-hover/resizer:bg-indigo-500 transition-colors" />
+              <div className="w-1 h-8 rounded-full bg-zinc-800 group-hover/resizer:bg-primary-500 transition-colors" />
             </div>
           )}
 

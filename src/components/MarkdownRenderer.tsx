@@ -26,7 +26,7 @@ function FileAttachment({ fileName, content }: { fileName: string; content: stri
         }}
         className="flex items-center gap-3 p-3 rounded-lg border border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800 transition-colors group w-full text-left"
       >
-        <div className="p-2 rounded-md bg-indigo-500/20 text-indigo-300 group-hover:text-indigo-200 group-hover:bg-indigo-500/30 transition-colors">
+        <div className="p-2 rounded-md bg-primary-500/20 text-primary-300 group-hover:text-primary-200 group-hover:bg-primary-500/30 transition-colors">
           <FileText size={20} />
         </div>
         <div className="flex-1 min-w-0">
@@ -43,7 +43,7 @@ function FileAttachment({ fileName, content }: { fileName: string; content: stri
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 bg-zinc-900">
               <div className="flex items-center gap-2">
-                <FileText size={18} className="text-indigo-400" />
+                <FileText size={18} className="text-primary-400" />
                 <span className="font-medium text-zinc-200">{fileName}</span>
               </div>
               <button 
@@ -153,10 +153,10 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
       return <li className="pl-1">{children}</li>
   },
   blockquote({ children }: any) {
-      return <blockquote className="border-l-4 border-indigo-500/50 pl-4 py-1 bg-zinc-800/20 rounded-r italic text-zinc-400 my-4">{children}</blockquote>
+      return <blockquote className="border-l-4 border-primary-500/50 pl-4 py-1 bg-zinc-800/20 rounded-r italic text-zinc-400 my-4">{children}</blockquote>
   },
   a({ href, children }: any) {
-      return <a href={href} className="text-indigo-400 hover:text-indigo-300 hover:underline transition-colors" target="_blank" rel="noopener noreferrer">{children}</a>
+      return <a href={href} className="text-primary-400 hover:text-primary-300 hover:underline transition-colors" target="_blank" rel="noopener noreferrer">{children}</a>
   },
   h1({ children }: any) { return <h1 className="text-2xl font-bold mt-8 mb-4 pb-2 border-b border-zinc-800 text-zinc-100">{children}</h1> },
   h2({ children }: any) { return <h2 className="text-xl font-bold mt-6 mb-3 text-zinc-100">{children}</h2> },

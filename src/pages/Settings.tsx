@@ -1,11 +1,13 @@
 import { Link } from "react-router-dom";
 import { ArrowLeft, Save, Trash2, Upload } from "lucide-react";
 import { useSettingsStore } from "@/stores/useSettingsStore";
+import { useThemeStore, ThemeColor, themeColors } from "@/stores/useThemeStore";
 import { useState, useEffect, useRef } from "react";
 import { saveFont, deleteFont, loadFontToDocument } from "@/utils/fontManager";
 
 export default function Settings() {
   const { apiConfig, uiConfig, customFonts, setApiConfig, setUiConfig, addCustomFont, removeCustomFont } = useSettingsStore();
+  const { themeColor, setThemeColor } = useThemeStore();
   
   // Local state for form to avoid excessive writes/renders, 
   // though for simple settings direct store update is also fine.
@@ -130,7 +132,7 @@ export default function Settings() {
                 value={baseUrl}
                 onChange={(e) => setBaseUrl(e.target.value)}
                 placeholder="https://api.openai.com/v1"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:border-primary-500 focus:outline-none"
               />
               <p className="mt-1 text-xs text-zinc-500">
                 如果是本地模型（如 Ollama），可尝试 http://localhost:11434/v1
@@ -146,7 +148,7 @@ export default function Settings() {
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="sk-..."
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:border-primary-500 focus:outline-none"
               />
             </div>
 
@@ -159,7 +161,7 @@ export default function Settings() {
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
                 placeholder="gpt-3.5-turbo"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:border-primary-500 focus:outline-none"
               />
             </div>
           </div>
@@ -173,6 +175,32 @@ export default function Settings() {
           </p>
 
           <div className="space-y-6 max-w-lg">
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-3">
+                主题颜色
+              </label>
+              <div className="flex flex-wrap gap-3">
+                {(['indigo', 'blue', 'green', 'red', 'orange', 'violet', 'pink', 'zinc'] as ThemeColor[]).map((color) => (
+                  <button
+                    key={color}
+                    onClick={() => setThemeColor(color)}
+                    className={`h-8 w-8 rounded-full border-2 transition-all ${
+                      themeColor === color
+                        ? 'border-zinc-100 scale-110'
+                        : 'border-transparent hover:scale-105'
+                    }`}
+                    style={{ backgroundColor: `rgb(${themeColors[color][500]})` }}
+                    title={color}
+                  >
+                    <span className="sr-only">{color}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-zinc-500">
+                选择应用的主题色调。
+              </p>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-zinc-300 mb-1">
                 界面布局
@@ -225,7 +253,7 @@ export default function Settings() {
                 step="1"
                 value={fontSize}
                 onChange={(e) => setFontSize(Number(e.target.value))}
-                className="w-full accent-indigo-500"
+                className="w-full accent-primary-500"
               />
             </div>
 
@@ -240,7 +268,7 @@ export default function Settings() {
                 step="0.1"
                 value={lineHeight}
                 onChange={(e) => setLineHeight(Number(e.target.value))}
-                className="w-full accent-indigo-500"
+                className="w-full accent-primary-500"
               />
             </div>
 
@@ -252,7 +280,7 @@ export default function Settings() {
                 <select
                     value={fontFamily}
                     onChange={(e) => setFontFamily(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:border-indigo-500 focus:outline-none"
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:border-primary-500 focus:outline-none"
                 >
                     <option value="sans-serif">系统默认 (Sans Serif)</option>
                     <option value="serif">衬线体 (Serif)</option>
@@ -294,7 +322,7 @@ export default function Settings() {
                        />
                        <button 
                            onClick={() => fileInputRef.current?.click()}
-                           className="flex items-center gap-2 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                           className="flex items-center gap-2 text-xs text-primary-400 hover:text-primary-300 transition-colors"
                        >
                            <Upload className="h-3 w-3" />
                            导入字体文件 (.ttf, .otf, .woff)
@@ -311,7 +339,7 @@ export default function Settings() {
           <div className="fixed bottom-6 right-6 z-50">
             <button
               onClick={handleSave}
-              className="flex items-center gap-2 rounded-full bg-indigo-600 px-6 py-3 font-semibold text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-500 transition-all active:scale-95"
+              className="flex items-center gap-2 rounded-full bg-primary-600 px-6 py-3 font-semibold text-white shadow-lg shadow-primary-500/20 hover:bg-primary-500 transition-all active:scale-95"
             >
               <Save className="h-5 w-5" />
               保存更改

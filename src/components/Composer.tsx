@@ -58,7 +58,7 @@ export default function Composer(props: {
           onChange={(e) => props.onChange(e.target.value)}
           rows={3}
           placeholder="输入你的下一条消息…"
-          className="flex-1 resize-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+          className="flex-1 resize-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
           style={{
             fontSize: `${uiConfig.fontSize}px`,
             lineHeight: uiConfig.lineHeight,
@@ -66,8 +66,24 @@ export default function Composer(props: {
           }}
           disabled={props.disabled || isReading}
           onKeyDown={(e) => {
-             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                props.onSend()
+             if (e.nativeEvent.isComposing) return
+
+             if (e.key === 'Enter') {
+                if (e.metaKey || e.ctrlKey) {
+                   e.preventDefault()
+                   const target = e.currentTarget
+                   const start = target.selectionStart
+                   const end = target.selectionEnd
+                   const newVal = props.value.substring(0, start) + "\n" + props.value.substring(end)
+                   props.onChange(newVal)
+                   // Restore cursor position
+                   setTimeout(() => {
+                      target.selectionStart = target.selectionEnd = start + 1
+                   }, 0)
+                } else if (!e.shiftKey) {
+                   e.preventDefault()
+                   props.onSend()
+                }
              }
           }}
         />
@@ -91,7 +107,7 @@ export default function Composer(props: {
           <button
             type="button"
             onClick={() => props.onSend()}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-500 disabled:opacity-50"
             disabled={props.disabled || isReading}
           >
             <Send className="h-4 w-4" />
