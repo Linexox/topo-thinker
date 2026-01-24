@@ -75,3 +75,30 @@ interface ConversationNode {
 
 ---
 > *"把对话从一条线，变成一张网，捕捉思维的每一个火花。"*
+
+---
+
+## 🚀 快速开始 (Quick Start)
+
+### 环境要求 (Prerequisites)
+*   Node.js (推荐 v18 或更高版本)
+*   npm (或 pnpm/yarn)
+
+### 1. 安装依赖 (Install Dependencies)
+```bash
+npm install
+```
+
+### 2. 启动开发服务器 (Start Development Server)
+```bash
+npm run dev
+```
+启动后访问 [http://localhost:5173](http://localhost:5173) 即可体验。
+
+### 3. 构建生产版本 (Build for Production)
+```bash
+npm run build
+```
+
+### 4. 配置说明 (Configuration)
+项目启动后，请在设置页面（Settings）配置您的 LLM API 信息（API Key 和 Base URL），以便正常使用对话功能。
