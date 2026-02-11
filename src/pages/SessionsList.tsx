@@ -14,10 +14,10 @@ export default function SessionsList() {
       <header className="border-b border-zinc-800">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-zinc-800" />
+            <img src="/topothinker.png" alt="logo" className="h-8 w-8 rounded-lg" />
             <div>
               <div className="text-sm font-semibold">topo-thinker</div>
-              <div className="text-xs text-zinc-400">阅读流 ≠ 上下文；只喂显式装配</div>
+              <div className="text-xs text-zinc-400">把对话从一条线，变成一张网，捕捉思维的每一个火花。</div>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -44,7 +44,7 @@ export default function SessionsList() {
               const id = createSession();
               navigate(`/sessions/${id}`);
             }}
-            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-500"
           >
             <Plus className="h-4 w-4" />
             新建会话

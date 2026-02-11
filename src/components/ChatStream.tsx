@@ -1,13 +1,14 @@
 import type { ChatViewMode, TopoNode } from "@/types/topo"
 import MarkdownRenderer from "./MarkdownRenderer"
-import { Scissors } from "lucide-react"
+import { Scissors, Minimize2, Maximize2 } from "lucide-react"
+import { useEffect, useRef } from "react"
 
 function RolePill({ type }: { type: TopoNode["type"] }) {
   const color =
     type === "user"
       ? "bg-emerald-600/20 text-emerald-200"
       : type === "assistant"
-        ? "bg-indigo-600/20 text-indigo-200"
+        ? "bg-primary-600/20 text-primary-200"
         : type === "system"
           ? "bg-zinc-700/40 text-zinc-200"
           : type === "tool"
@@ -24,7 +25,10 @@ export default function ChatStream(props: {
   onChangeViewMode: (mode: ChatViewMode) => void
   onSelectNode: (nodeId: string) => void
   onLocateNode: (nodeId: string) => void
+  isFullscreen?: boolean
+  onToggleFullscreen?: () => void
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null)
   const list: TopoNode[] = []
   if (props.viewMode === "timeline") {
     list.push(...Object.values(props.nodes).sort((a, b) => a.createdAt - b.createdAt))
@@ -42,29 +46,64 @@ export default function ChatStream(props: {
     list.reverse()
   }
 
+  const lastNodeId = list.length > 0 ? list[list.length - 1].id : null
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
+    }
+  }, [lastNodeId, props.viewMode])
+
+  // Scroll to selected node when it changes
+  useEffect(() => {
+    if (props.selectedNodeId && scrollRef.current) {
+      // Small delay to ensure DOM is ready if switching view modes
+      setTimeout(() => {
+        const el = document.getElementById(`chat-bubble-${props.selectedNodeId}`)
+         if (el) {
+           el.scrollIntoView({ behavior: "smooth", block: "center" })
+         }
+       }, 100)
+    }
+  }, [props.selectedNodeId])
+
   return (
     <div className="flex h-full flex-col min-h-0">
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm font-medium">ChatStream</div>
-        <div className="flex rounded-lg border border-zinc-800 bg-zinc-950 p-1 text-xs">
-          <button
-            type="button"
-            onClick={() => props.onChangeViewMode("primary")}
-            className={`rounded-md px-2 py-1 ${props.viewMode === "primary" ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"}`}
-          >
-            主链
-          </button>
-          <button
-            type="button"
-            onClick={() => props.onChangeViewMode("timeline")}
-            className={`rounded-md px-2 py-1 ${props.viewMode === "timeline" ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"}`}
-          >
-            时间流
-          </button>
+        <div className="flex items-center gap-2">
+          {props.onToggleFullscreen && (
+            <button
+              onClick={props.onToggleFullscreen}
+              className="rounded-lg p-1 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors"
+              title={props.isFullscreen ? "退出全屏" : "全屏"}
+            >
+              {props.isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </button>
+          )}
+          <div className="flex rounded-lg border border-zinc-800 bg-zinc-950 p-1 text-xs">
+            <button
+              type="button"
+              onClick={() => props.onChangeViewMode("primary")}
+              className={`rounded-md px-2 py-1 ${props.viewMode === "primary" ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"}`}
+            >
+              主链
+            </button>
+            <button
+              type="button"
+              onClick={() => props.onChangeViewMode("timeline")}
+              className={`rounded-md px-2 py-1 ${props.viewMode === "timeline" ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"}`}
+            >
+              时间流
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="mt-4 flex-1 overflow-auto rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+      <div 
+        ref={scrollRef}
+        className="mt-4 flex-1 overflow-auto rounded-lg border border-zinc-800 bg-zinc-950 p-3"
+      >
         {list.length === 0 ? <div className="text-sm text-zinc-400">暂无内容</div> : null}
         <div className="space-y-3">
           {list.map((n) => {
@@ -73,10 +112,11 @@ export default function ChatStream(props: {
             return (
               <div
                 key={n.id}
+                id={`chat-bubble-${n.id}`}
                 onClick={() => props.onLocateNode(n.id)}
                 className={`group relative w-full rounded-xl border px-3 py-2 text-left transition-colors cursor-pointer ${
                   isSelected
-                    ? "border-indigo-500/50 bg-indigo-500/10"
+                    ? "border-primary-500/50 bg-primary-500/10"
                     : isActive
                       ? "border-zinc-700 bg-zinc-900/40 hover:bg-zinc-900/70"
                       : "border-zinc-800 bg-zinc-950 opacity-70 hover:opacity-100"
@@ -88,7 +128,7 @@ export default function ChatStream(props: {
                     <span className="text-xs text-zinc-400">{new Date(n.createdAt).toLocaleTimeString()}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                     <span className={`text-[11px] ${isActive ? "text-indigo-200" : "text-zinc-500"}`}>{
+                     <span className={`text-[11px] ${isActive ? "text-primary-200" : "text-zinc-500"}`}>{
                         isActive ? "ACTIVE" : "INACTIVE"
                      }</span>
                   </div>
