@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
-import type { ChatViewMode, SessionData, TopoNode } from "@/types/topo"
+import type { AttachedPack, ChatViewMode, SessionData, TopoNode } from "@/types/topo"
 import { createId } from "@/utils/id"
 import { cloneSession, createSeedSession, createSnapshotPack, findReusablePack, getOrCreateAssembly, normalizeOrders, isAncestor } from "@/stores/topoInternals"
 
@@ -137,16 +137,6 @@ export const useTopoStore = create<TopoState>()(
           if (!session || !session.nodes[sourceNodeId]) return sourceNodeId
 
           const newNodeId = createId("n")
-          // Helper to check ancestor relationship
-          const isAncestor = (ancestorId: string, descendantId: string, nodes: Record<string, TopoNode>) => {
-            let curr = nodes[descendantId]?.preferredParentId
-            while (curr) {
-              if (curr === ancestorId) return true
-              curr = nodes[curr]?.preferredParentId
-            }
-            return false
-          }
-
           set((state) => {
             const s0 = state.sessions[sessionId]
             if (!s0) return state
@@ -202,11 +192,12 @@ export const useTopoStore = create<TopoState>()(
             // Logic to automatically inherit context from parent
             // CHANGE: We now use "Deep Inheritance" (traversing ancestors at runtime).
             // So we do NOT copy attached packs from parent.
-            const newAttachedPacks: any[] = []
+            const newAttachedPacks: AttachedPack[] = []
 
             // Add extra attached IDs
             if (extraAttachedIds) {
               for (const sourceId of extraAttachedIds) {
+                if (!s.nodes[sourceId] || sourceId === newNodeId) continue
                 // Skip if source is parent (implicit chain covers it)
                 if (sourceId === parentNodeId) continue
                 // Skip if source is ancestor of parent (implicit chain covers it)
@@ -279,10 +270,11 @@ export const useTopoStore = create<TopoState>()(
           set((state) => {
             const s0 = state.sessions[sessionId]
             if (!s0) return state
-            const sourceIds = Array.isArray(sourceNodeIdOrIds) ? sourceNodeIdOrIds : [sourceNodeIdOrIds]
+            const sourceIds = (Array.isArray(sourceNodeIdOrIds) ? sourceNodeIdOrIds : [sourceNodeIdOrIds])
+              .filter((id): id is string => Boolean(id))
             const primarySourceId = sourceIds[0]
             
-            if (!s0.nodes[targetNodeId] || !s0.nodes[primarySourceId]) return state
+            if (!primarySourceId || !s0.nodes[targetNodeId] || !s0.nodes[primarySourceId]) return state
 
             const s = cloneSession(s0)
             // Clone assembly to avoid mutating shared state
@@ -311,7 +303,7 @@ export const useTopoStore = create<TopoState>()(
 
             // If none attached, attach the PRIMARY source (the first one)
             // Prevent attaching a descendant as context (Cycle prevention)
-            if (isAncestor(targetNodeId, primarySourceId, s.nodes)) {
+            if (targetNodeId === primarySourceId || isAncestor(targetNodeId, primarySourceId, s.nodes)) {
                console.warn("Cannot attach a descendant as context")
                return state
             }
@@ -332,7 +324,7 @@ export const useTopoStore = create<TopoState>()(
         setAttachedEnabled: (sessionId, targetNodeId, packId, enabled) => {
           set((state) => {
             const s0 = state.sessions[sessionId]
-            if (!s0) return state
+            if (!s0 || !s0.nodes[targetNodeId] || !s0.packs[packId]) return state
             const s = cloneSession(s0)
             const oldAsm = getOrCreateAssembly(s, targetNodeId)
             const asm = { ...oldAsm }
@@ -345,7 +337,7 @@ export const useTopoStore = create<TopoState>()(
         moveAttachedPack: (sessionId, targetNodeId, packId, direction) => {
           set((state) => {
             const s0 = state.sessions[sessionId]
-            if (!s0) return state
+            if (!s0 || !s0.nodes[targetNodeId]) return state
             const s = cloneSession(s0)
             const oldAsm = getOrCreateAssembly(s, targetNodeId)
             
@@ -369,11 +361,16 @@ export const useTopoStore = create<TopoState>()(
         setAttachedCutIndex: (sessionId, targetNodeId, packId, cutIndexOverride) => {
           set((state) => {
             const s0 = state.sessions[sessionId]
-            if (!s0) return state
+            if (!s0 || !s0.nodes[targetNodeId]) return state
             const s = cloneSession(s0)
             const oldAsm = getOrCreateAssembly(s, targetNodeId)
+            const pack = s.packs[packId]
+            if (!pack) return state
             const asm = { ...oldAsm }
-            asm.attachedPacks = oldAsm.attachedPacks.map((p) => (p.packId === packId ? { ...p, cutIndexOverride } : p))
+            const normalizedCut = cutIndexOverride === undefined
+              ? undefined
+              : Math.max(0, Math.min(Math.trunc(cutIndexOverride), pack.nodes.length))
+            asm.attachedPacks = oldAsm.attachedPacks.map((p) => (p.packId === packId ? { ...p, cutIndexOverride: normalizedCut } : p))
             s.assemblies[targetNodeId] = asm
             return { ...state, sessions: { ...state.sessions, [sessionId]: s } }
           })
@@ -382,10 +379,10 @@ export const useTopoStore = create<TopoState>()(
         regenerateAttachedPack: (sessionId, targetNodeId, packId) => {
           set((state) => {
             const s0 = state.sessions[sessionId]
-            if (!s0) return state
+            if (!s0 || !s0.nodes[targetNodeId]) return state
             const s = cloneSession(s0)
             const old = s.packs[packId]
-            if (!old) return state
+            if (!old || !s.nodes[old.sourceNodeId]) return state
 
             const newPack = createSnapshotPack(s, old.sourceNodeId)
             s.packs[newPack.packId] = newPack

@@ -1,78 +1,91 @@
-import type { ContextAssembly, PreviewMessage, SnapshotPack, TopoNode } from "@/types/topo"
+import type { ContextAssembly, MessageRole, PreviewMessage, SnapshotPack, TopoNode } from "@/types/topo"
 
-export function buildSnapshotPackNodes(sourceNodeId: string, nodes: Record<string, TopoNode>) {
+export function buildSnapshotPackNodes(sourceNodeId: string, nodes: Record<string, TopoNode>): TopoNode[] {
   const chain: TopoNode[] = []
   const visited = new Set<string>()
-  let cur: string | undefined = sourceNodeId
+  let current: string | undefined = sourceNodeId
 
-  while (cur) {
-    if (visited.has(cur)) {
-      break
-    }
-    visited.add(cur)
-    const n = nodes[cur]
-    if (!n) {
-      break
-    }
-    chain.push(n)
-    cur = n.preferredParentId
+  while (current && !visited.has(current)) {
+    visited.add(current)
+    const node = nodes[current]
+    if (!node) break
+    chain.push(node)
+    current = node.preferredParentId
   }
-
   return chain.reverse()
 }
 
-export function buildActiveSet(
-  assemblies: Record<string, ContextAssembly>,
-  packs: Record<string, SnapshotPack>, 
-  nodes?: Record<string, TopoNode>, 
-  currentNodeId?: string,
-  pendingSourceIds?: string[]
-) {
-  const active = new Set<string>()
-  
-  // 1. Implicit Chain & Attached Packs (Deep Inheritance)
-  if (nodes && currentNodeId) {
-    // buildSnapshotPackNodes returns [Root ... Current]
-    const chain = buildSnapshotPackNodes(currentNodeId, nodes)
-    
-    for (const n of chain) {
-      // Add the ancestor itself
-      active.add(n.id)
+function messageRole(type: TopoNode["type"]): MessageRole {
+  if (type === "assistant" || type === "system") return type
+  if (type === "summary") return "system"
+  // A standalone tool message has no tool_call_id and is invalid for Chat Completions.
+  return "user"
+}
 
-      // Add its attached packs
-      const asm = assemblies[n.id]
-      if (asm) {
-        const attached = [...asm.attachedPacks].filter((p) => p.enabled)
-        for (const ap of attached) {
-          const pack = packs[ap.packId]
-          if (!pack) continue
-          const start = ap.cutIndexOverride ?? pack.defaultCutIndex
-          for (const pn of pack.nodes.slice(start)) {
-            active.add(pn.originalNodeId)
-          }
-        }
+function cutIndex(value: number, length: number): number {
+  return Number.isInteger(value) ? Math.max(0, Math.min(value, length)) : 0
+}
+
+export function buildContext(
+  assemblies: Record<string, ContextAssembly>,
+  packs: Record<string, SnapshotPack>,
+  nodes?: Record<string, TopoNode>,
+  currentNodeId?: string,
+  pendingSourceIds: string[] = [],
+  pendingUserInput = "",
+): { messages: PreviewMessage[]; activeNodeIds: Set<string> } {
+  const messages: PreviewMessage[] = []
+  const activeNodeIds = new Set<string>()
+  const primaryChain = nodes && currentNodeId ? buildSnapshotPackNodes(currentNodeId, nodes) : []
+  const primaryIds = new Set(primaryChain.map((node) => node.id))
+
+  const addMessage = (node: Pick<TopoNode, "id" | "type" | "content">, meta: PreviewMessage["meta"]) => {
+    if (activeNodeIds.has(node.id)) return
+    messages.push({ role: messageRole(node.type), content: node.content, meta })
+    activeNodeIds.add(node.id)
+  }
+
+  for (const node of primaryChain) {
+    addMessage(node, { originalNodeId: node.id })
+    const attached = assemblies[node.id]?.attachedPacks
+      .filter((pack) => pack.enabled)
+      .sort((a, b) => a.order - b.order) ?? []
+    for (const attachedPack of attached) {
+      const pack = packs[attachedPack.packId]
+      if (!pack) continue
+      const start = cutIndex(attachedPack.cutIndexOverride ?? pack.defaultCutIndex, pack.nodes.length)
+      for (const snapshotNode of pack.nodes.slice(start)) {
+        if (primaryIds.has(snapshotNode.originalNodeId)) continue
+        addMessage(
+          { id: snapshotNode.originalNodeId, type: snapshotNode.type, content: snapshotNode.content },
+          { packId: pack.packId, originalNodeId: snapshotNode.originalNodeId },
+        )
       }
     }
   }
 
-  // 2. Pending Sources (Draft Context)
-  if (pendingSourceIds && nodes) {
+  if (nodes) {
     for (const sourceId of pendingSourceIds) {
-       // Trace back from sourceId to find all nodes in this "pack"
-       let cur: string | undefined = sourceId
-       const visited = new Set<string>()
-       while (cur) {
-         if (visited.has(cur)) break
-         visited.add(cur)
-         const n = nodes[cur]
-         if (!n) break
-         active.add(n.id)
-         cur = n.preferredParentId
-       }
+      for (const node of buildSnapshotPackNodes(sourceId, nodes)) {
+        if (primaryIds.has(node.id)) continue
+        addMessage(node, { pendingSourceId: sourceId, originalNodeId: node.id })
+      }
     }
   }
 
-  return active
+  const input = pendingUserInput.trim()
+  if (input) messages.push({ role: "user", content: input })
+  return { messages, activeNodeIds }
+}
+
+export function buildActiveSet(
+  assemblies: Record<string, ContextAssembly>,
+  packs: Record<string, SnapshotPack>,
+  nodes?: Record<string, TopoNode>,
+  currentNodeId?: string,
+  pendingSourceIds?: string[],
+): Set<string> {
+  return buildContext(assemblies, packs, nodes, currentNodeId, pendingSourceIds).activeNodeIds
 }
 
 export function buildPreviewMessages(
@@ -81,75 +94,7 @@ export function buildPreviewMessages(
   pendingUserInput: string,
   nodes?: Record<string, TopoNode>,
   currentNodeId?: string,
-  pendingSourceIds?: string[]
+  pendingSourceIds?: string[],
 ): PreviewMessage[] {
-  const messages: PreviewMessage[] = []
-  const includedNodeIds = new Set<string>()
-
-  // 1. Implicit Chain & Attached Packs (Deep Inheritance)
-  if (nodes && currentNodeId) {
-    const chain = buildSnapshotPackNodes(currentNodeId, nodes) // Returns [Root ... Current]
-    
-    for (const n of chain) {
-      // 1a. Add the node content itself (if not already included)
-      if (!includedNodeIds.has(n.id)) {
-        const role = n.type === "system" ? "system" : (n.type === "assistant" ? "assistant" : "user")
-        messages.push({ 
-          role: role as any, 
-          content: n.content, 
-          meta: { originalNodeId: n.id } 
-        })
-        includedNodeIds.add(n.id)
-      }
-
-      // 1b. Add its attached packs
-      const asm = assemblies[n.id]
-      if (asm) {
-        const attached = [...asm.attachedPacks].filter((p) => p.enabled).sort((a, b) => a.order - b.order)
-        for (const ap of attached) {
-          const pack = packs[ap.packId]
-          if (!pack) continue
-          const start = ap.cutIndexOverride ?? pack.defaultCutIndex
-          
-          for (const pn of pack.nodes.slice(start)) {
-            if (includedNodeIds.has(pn.originalNodeId)) continue
-            const role = pn.type === "summary" ? "system" : pn.type
-            messages.push({ 
-              role, 
-              content: pn.content, 
-              meta: { packId: pack.packId, originalNodeId: pn.originalNodeId } 
-            })
-            includedNodeIds.add(pn.originalNodeId)
-          }
-        }
-      }
-    }
-  }
-
-  // Helper to process a "Pack-like" chain
-  const processChain = (chain: TopoNode[], meta: any) => {
-    for (const n of chain) {
-      if (includedNodeIds.has(n.id)) continue
-      const role = n.type === "system" ? "system" : (n.type === "assistant" ? "assistant" : "user")
-      messages.push({ role: role as any, content: n.content, meta: { ...meta, originalNodeId: n.id } })
-      includedNodeIds.add(n.id)
-    }
-  }
-
-  // 3. Pending Sources
-  if (pendingSourceIds && nodes) {
-    for (const sourceId of pendingSourceIds) {
-      const chain = buildSnapshotPackNodes(sourceId, nodes)
-      processChain(chain, { pendingSourceId: sourceId })
-    }
-  }
-
-
-  const text = pendingUserInput.trim()
-  if (text.length > 0) {
-    messages.push({ role: "user", content: text })
-  }
-
-  return messages
+  return buildContext(assemblies, packs, nodes, currentNodeId, pendingSourceIds, pendingUserInput).messages
 }
-

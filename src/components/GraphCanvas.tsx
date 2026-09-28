@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from "react"
 import ReactFlow, { Background, Controls, Handle, Position, type Edge, type Node, type ReactFlowInstance } from "reactflow"
 import "reactflow/dist/style.css"
-import { GitFork, MessageSquarePlus, Paperclip, X, File as FileIcon } from "lucide-react"
+import { MessageSquarePlus, Paperclip, X, File as FileIcon } from "lucide-react"
 import type { TopoNode, ContextAssembly, SnapshotPack } from "@/types/topo"
 import MarkdownRenderer from "./MarkdownRenderer"
 import { processFile } from "@/utils/fileProcessor"
@@ -298,24 +298,6 @@ export default function GraphCanvas(props: {
   const activeColor = `rgb(${themeColors[themeColor][500]})`
   const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null)
 
-  // Identify nodes that are explicitly referenced as context sources
-  const referencedNodeIds = useMemo(() => {
-    const set = new Set<string>()
-    if (props.assemblies && props.packs) {
-      for (const asm of Object.values(props.assemblies)) {
-        for (const ap of asm.attachedPacks) {
-          if (ap.enabled) {
-            const pack = props.packs[ap.packId]
-            if (pack) {
-              set.add(pack.sourceNodeId)
-            }
-          }
-        }
-      }
-    }
-    return set
-  }, [props.assemblies, props.packs])
-
   // Pre-process nodes to identify "Mergeable User Nodes"
   // A User node is mergeable if it has at least one Assistant child.
   // If merged, the User node is hidden, and its content is shown in the Assistant child(ren).
@@ -355,10 +337,11 @@ export default function GraphCanvas(props: {
       }
     })
     return { mergedUserIds: merged, assistantParentMap: map, assistantToUserMap: aToU, userToAssistantMap: uToA }
-  }, [props.nodes]) // referencedNodeIds dependency removed
+  }, [props.nodes])
 
+  const { nodes, activeSet, selectedNodeId, onFork, onToggleAttach, onSelectNode, onUpdateContent, onAsk } = props
   const rfNodes: Node<TopoNodeData>[] = useMemo(() => {
-    return Object.values(props.nodes)
+    return Object.values(nodes)
       .filter(n => !mergedUserIds.has(n.id)) // Hide merged user nodes
       .map((n) => ({
       id: n.id,
@@ -367,31 +350,31 @@ export default function GraphCanvas(props: {
       data: {
         node: n,
         parentContent: assistantParentMap.get(n.id),
-        isActive: props.activeSet.has(n.id),
-        isSelected: props.selectedNodeId === n.id,
-        onFork: props.onFork,
+         isActive: activeSet.has(n.id),
+         isSelected: selectedNodeId === n.id,
+         onFork,
         onToggleAttach: (id) => {
-           const node = props.nodes[id]
+            const node = nodes[id]
            const ids = [id]
            
            // If clicking an Assistant node, also include its User parent in the toggle operation
            // This ensures that if the User parent was referenced (and thus preventing merge, or just logically related),
            // clicking the Assistant will clear that reference too.
            if (node?.type === 'assistant' && node.preferredParentId) {
-             const parent = props.nodes[node.preferredParentId]
+              const parent = nodes[node.preferredParentId]
              if (parent?.type === 'user') {
                ids.push(parent.id)
              }
            }
 
-           (props.onToggleAttach as any)(ids)
+            onToggleAttach(ids)
         },
-        onSelectNode: props.onSelectNode,
-        onUpdateContent: props.onUpdateContent,
-        onAsk: props.onAsk,
+         onSelectNode,
+         onUpdateContent,
+         onAsk,
       },
     }))
-  }, [props.activeSet, props.nodes, props.onFork, props.selectedNodeId, props.onToggleAttach, props.onSelectNode, props.onUpdateContent, props.onAsk, mergedUserIds, assistantParentMap, assistantToUserMap])
+  }, [activeSet, nodes, onFork, selectedNodeId, onToggleAttach, onSelectNode, onUpdateContent, onAsk, mergedUserIds, assistantParentMap])
 
   const edges: Edge[] = useMemo(() => {
     const list: Edge[] = []
@@ -411,7 +394,7 @@ export default function GraphCanvas(props: {
       if (!props.nodes[n.preferredParentId]) continue
 
       let sourceId = n.preferredParentId
-      let targetId = n.id
+      const targetId = n.id
       
       // If target is merged, skip (handled by its children)
       if (mergedUserIds.has(targetId)) continue
@@ -491,7 +474,6 @@ export default function GraphCanvas(props: {
 
         // 2.1 Collect all candidate source IDs from enabled packs of ALL context holders
         const candidateSourceIds = new Set<string>()
-        const packMap = new Map<string, SnapshotPack>() // sourceId -> pack
         
         for (const holderId of contextHolderIds) {
             const asm = props.assemblies[holderId]
@@ -502,7 +484,6 @@ export default function GraphCanvas(props: {
               const pack = props.packs[ap.packId]
               if (!pack) continue
               candidateSourceIds.add(pack.sourceNodeId)
-              packMap.set(pack.sourceNodeId, pack)
             }
         }
         
@@ -511,10 +492,8 @@ export default function GraphCanvas(props: {
 
         // 2.3 Draw edges for final sources
         for (const rawSourceId of finalSourceIds) {
-          const pack = packMap.get(rawSourceId)!
-          
           let sourceId = rawSourceId
-          let targetId = n.id
+          const targetId = n.id
 
           // Avoid self-loops
           if (sourceId === targetId) continue
@@ -543,7 +522,7 @@ export default function GraphCanvas(props: {
     }
     
     return list
-  }, [props.nodes, props.assemblies, props.packs, props.activeSet, mergedUserIds, userToAssistantMap, activeColor])
+  }, [props.nodes, props.assemblies, props.packs, props.activeSet, mergedUserIds, userToAssistantMap, assistantToUserMap, activeColor])
 
   const lastFocusTsRef = useRef<number>(0)
 

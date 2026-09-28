@@ -64,6 +64,7 @@ export type PreviewMessage = {
   meta?: {
     packId?: string
     originalNodeId?: string
+    pendingSourceId?: string
   }
 }
 

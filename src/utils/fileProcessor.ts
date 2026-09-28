@@ -1,8 +1,5 @@
-// @ts-ignore
 import mammoth from "mammoth/mammoth.browser";
-// @ts-ignore
 import * as pdfjsLib from 'pdfjs-dist';
-// @ts-ignore
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 // Set worker source globally
@@ -33,8 +30,9 @@ export async function processFile(file: File): Promise<string> {
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
-        // @ts-ignore
-        const pageText = textContent.items.map((item: any) => item.str).join(" ");
+        const pageText = textContent.items
+          .map((item) => "str" in item ? item.str : "")
+          .join(" ");
         fullText += `\n\n--- Page ${i} ---\n${pageText}`;
       }
       return `\n\n\`\`\`file-attachment:${file.name}\n${fullText}\n\`\`\``;

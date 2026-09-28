@@ -51,8 +51,10 @@ export function createSnapshotPack(session: SessionData, sourceNodeId: string): 
 }
 
 export function isAncestor(potentialAncestor: string, target: string, nodes: Record<string, TopoNode>): boolean {
+  const visited = new Set<string>()
   let curr = nodes[target]
-  while (curr && curr.preferredParentId) {
+  while (curr && curr.preferredParentId && !visited.has(curr.id)) {
+    visited.add(curr.id)
     if (curr.preferredParentId === potentialAncestor) return true
     curr = nodes[curr.preferredParentId]
   }

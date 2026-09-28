@@ -9,6 +9,7 @@ import ContextPreviewDrawer from "@/components/ContextPreviewDrawer";
 import Composer, { Attachment } from "@/components/Composer";
 import { buildActiveSet, buildPreviewMessages } from "@/utils/context";
 import { processFile } from "@/utils/fileProcessor";
+import { streamChatCompletion } from "@/services/llmClient";
 
 export default function SessionDetail() {
   const params = useParams();
@@ -33,6 +34,9 @@ export default function SessionDetail() {
 
   const [composerText, setComposerText] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [isSending, setIsSending] = useState(false);
+  const sendingRef = useRef(false);
+  const requestRef = useRef<AbortController | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [isGraphFullscreen, setIsGraphFullscreen] = useState(false);
   const [pendingSourceIds, setPendingSourceIds] = useState<string[]>([]);
@@ -90,6 +94,8 @@ export default function SessionDetail() {
     if (sessionId) ensureSession(sessionId);
   }, [ensureSession, sessionId]);
 
+  useEffect(() => () => requestRef.current?.abort(), [sessionId]);
+
   // Clear pending sources when selected node changes
   useEffect(() => {
     setPendingSourceIds([]);
@@ -131,39 +137,21 @@ export default function SessionDetail() {
   }
 
   const handleSendMessage = async (parentId: string, text: string, sourceIds: string[] = []) => {
-    if (!sessionId) return
+    if (!sessionId || sendingRef.current) return
     
     // Prevent sending if files are still loading
-    if (attachments.some(a => a.loading)) return
+    if (parentId === selectedNodeId && attachments.some(a => a.loading)) return
 
-    let finalText = text
-    let shouldClearAttachments = false
+    if (!text.trim()) return
+    sendingRef.current = true
+    setIsSending(true)
 
-    // If sending from NodeCard (parentId !== selectedNodeId), try to append attachments if they exist
-    if (attachments.length > 0) {
-      if (parentId !== selectedNodeId) {
-        const attachmentContent = attachments.map(a => a.content || "").join("")
-        if (attachmentContent) {
-          finalText += attachmentContent
-          shouldClearAttachments = true
-        }
-      } else {
-        // From main composer, text should already include attachments via fullComposerText
-        shouldClearAttachments = true
-      }
-    }
-
-    if (!finalText.trim()) return
-
-    const userNodeId = addUserNode(sessionId, parentId, finalText, sourceIds)
+    const userNodeId = addUserNode(sessionId, parentId, text, sourceIds)
     
     // Clear pending sources and inputs
     if (parentId === selectedNodeId) {
       setPendingSourceIds([])
       setComposerText("")
-    }
-    
-    if (shouldClearAttachments) {
       setAttachments([])
     }
 
@@ -177,72 +165,26 @@ export default function SessionDetail() {
       userNodeId
     )
     
-    if (messages.length === 0) {
-       messages.push({ role: "user", content: text })
-    }
-    
     const assistantNodeId = addAssistantNode(sessionId, userNodeId, "Thinking...")
     setFocusTarget({ nodeId: assistantNodeId, ts: Date.now() })
 
+    const controller = new AbortController()
+    requestRef.current = controller
+    let receivedContent = ""
     try {
-      const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiConfig.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: apiConfig.model,
-          messages: messages.map((m) => ({ role: m.role, content: m.content })),
-          stream: true,
-        }),
-      })
-
-      if (!response.ok) {
-         const errText = await response.text()
-         updateNodeContent(sessionId, assistantNodeId, `Error: ${response.status}\n${errText}`)
-         return
-      }
-      
-      if (!response.body) return
-      
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let content = ""
-      let isFirstChunk = true
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        
-        const chunk = decoder.decode(value, { stream: true })
-        const lines = chunk.split("\n")
-        
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6).trim()
-            if (data === "[DONE]") break
-            
-            try {
-              const parsed = JSON.parse(data)
-              const delta = parsed.choices[0]?.delta?.content || ""
-              if (delta) {
-                if (isFirstChunk) {
-                  content = delta
-                  isFirstChunk = false
-                } else {
-                  content += delta
-                }
-                updateNodeContent(sessionId, assistantNodeId, content)
-              }
-            } catch (e) {
-              console.error("Parse error", e)
-            }
-          }
-        }
-      }
+      await streamChatCompletion(apiConfig, messages, (content) => {
+        receivedContent = content
+        updateNodeContent(sessionId, assistantNodeId, content)
+      }, controller.signal)
     } catch (error) {
-       updateNodeContent(sessionId, assistantNodeId, `Request Failed: ${error}`)
+      const message = controller.signal.aborted
+        ? "请求已取消"
+        : error instanceof Error ? error.message : String(error)
+      updateNodeContent(sessionId, assistantNodeId, `${receivedContent}${receivedContent ? "\n\n" : ""}请求失败：${message}`)
+    } finally {
+      requestRef.current = null
+      sendingRef.current = false
+      setIsSending(false)
     }
   }
 
@@ -437,7 +379,7 @@ export default function SessionDetail() {
                     }}
                     onAddFiles={handleAddFiles}
                     onRemoveFile={handleRemoveFile}
-                    disabled={!session}
+                    disabled={!session || isSending}
                   />
                 </div>
             </div>

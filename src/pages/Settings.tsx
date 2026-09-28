@@ -22,7 +22,6 @@ export default function Settings() {
   const [fontFamily, setFontFamily] = useState(uiConfig.fontFamily);
   const [layoutMode, setLayoutMode] = useState<'top' | 'side' | 'zen'>(uiConfig.layoutMode || 'top');
 
-  const [isDirty, setIsDirty] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -41,7 +40,6 @@ export default function Settings() {
   const handleSave = () => {
     setApiConfig({ baseUrl, apiKey, model });
     setUiConfig({ fontSize, lineHeight, fontFamily, layoutMode });
-    setIsDirty(false);
   };
 
   const handleFontUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -1,4 +1,4 @@
-import { Send, Eye, Paperclip, X, File as FileIcon } from "lucide-react"
+import { Send, Paperclip, X, File as FileIcon } from "lucide-react"
 import { useRef } from "react"
 import { useSettingsStore } from "@/stores/useSettingsStore"
 
